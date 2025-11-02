@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Stock management nav</title><meta name="title" content="Stock management nav"><meta name="description" content="All market place "><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
+  "imports": {}
+}</script></head><body>
+
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management - Navrose Stitching Point</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .table-container { max-height: 70vh; overflow-y: auto; }
+        thead th { position: sticky; top: 0; z-index: 10; background-color: #f8fafc; }
+        .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #111827; color: white; padding: 0.75rem 1.25rem; border-radius: 0.75rem; box-shadow: 0 6px 18px rgba(0,0,0,0.2); transition: all .3s ease-in-out; z-index:1200; transform: translateY(100%); opacity: 0; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+    </style>
+
+
+    <div class="max-w-7xl mx-auto">
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-slate-800">Inventory Management</h1>
+            <a href="index.html" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Back to Main App</a>
+        </header>
+
+        <div id="stats-container" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-lg shadow"><h3 class="text-gray-500 text-sm font-medium">Total Items</h3><p id="total-items" class="text-2xl font-bold mt-1">0</p></div>
+            <div class="bg-white p-4 rounded-lg shadow"><h3 class="text-gray-500 text-sm font-medium">Pending Approval</h3><p id="pending-items" class="text-2xl font-bold mt-1 text-yellow-600">0</p></div>
+            <div class="bg-white p-4 rounded-lg shadow"><h3 class="text-gray-500 text-sm font-medium">Awaiting Image</h3><p id="awaiting-image" class="text-2xl font-bold mt-1 text-blue-600">0</p></div>
+            <div class="bg-white p-4 rounded-lg shadow"><h3 class="text-gray-500 text-sm font-medium">Live on Marketplace</h3><p id="live-items" class="text-2xl font-bold mt-1 text-green-600">0</p></div>
+        </div>
+
+        <main class="bg-white rounded-lg shadow">
+            <div class="table-container">
+                <table class="w-full text-sm text-left">
+                    <thead class="text-xs text-gray-700 uppercase">
+                        <tr>
+                            <th class="px-4 py-3">Image</th>
+                            <th class="px-4 py-3">Product</th>
+                            <th class="px-4 py-3">Seller</th>
+                            <th class="px-4 py-3">Listing Details</th>
+                            <th class="px-4 py-3">Status</th>
+                            <th class="px-4 py-3 min-w-[300px]">Image URL (Google Drive)</th>
+                            <th class="px-4 py-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-tbody">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC0_DQIiyaVQllFH4pxH1Dm3r2kFXXoOgc",
+            authDomain: "navrosetailorapp.firebaseapp.com",
+            databaseURL: "https://navrosetailorapp-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "navrosetailorapp"
+        };
+
+        let db;
+
+        const inventoryTbody = document.getElementById('inventory-tbody');
+        
+        function showToast(message, ms = 3000) {
+            const t = document.getElementById('toast');
+            t.textContent = message;
+            t.classList.add('show');
+            clearTimeout(t.hideTimeout);
+            t.hideTimeout = setTimeout(() => t.classList.remove('show'), ms);
+        }
+
+        const getGoogleDriveImageUrl = (sharingUrl) => {
+            if (!sharingUrl || !sharingUrl.includes('drive.google.com')) {
+                return sharingUrl || 'https://via.placeholder.com/150x100.png?text=No+Image';
+            }
+            const fileIdMatch = sharingUrl.match(/file\/d\/([a-zA-Z0-9_-]+)/);
+            if (fileIdMatch && fileIdMatch[1]) {
+                const fileId = fileIdMatch[1];
+                return `https://drive.google.com/uc?export=view&id=${fileId}`;
+            }
+            return 'https://via.placeholder.com/150x100.png?text=Invalid+Link';
+        };
+
+        function renderTable(products) {
+            const productList = Object.values(products);
+
+            // Calculate stats
+            document.getElementById('total-items').textContent = productList.length;
+            document.getElementById('pending-items').textContent = productList.filter(p => p.status === 'pending_approval').length;
+            document.getElementById('awaiting-image').textContent = productList.filter(p => !p.imageUrl).length;
+            document.getElementById('live-items').textContent = productList.filter(p => p.status === 'approved' && p.imageUrl).length;
+
+            if (productList.length === 0) {
+                inventoryTbody.innerHTML = `<tr><td colspan="7" class="text-center p-8 text-gray-500">No products listed in the marketplace.</td></tr>`;
+                return;
+            }
+            
+            // Sort by listed date, newest first
+            productList.sort((a,b) => new Date(b.listedDate) - new Date(a.listedDate));
+
+            const rowsHtml = productList.map(p => {
+                const imageUrl = getGoogleDriveImageUrl(p.imageUrl);
+                
+                let listingDetails = `<span class="font-semibold">${p.listingType?.charAt(0).toUpperCase() + p.listingType?.slice(1)}</span>`;
+                if (p.listingType === 'sale' || p.listingType === 'both') {
+                    listingDetails += `<br>Sale: <strong>₹${p.price}</strong>`;
+                }
+                if (p.listingType === 'rent' || p.listingType === 'both') {
+                    listingDetails += `<br>Rent: <strong>₹${p.rentPrice}/day</strong>`;
+                }
+
+                const statusText = (p.status || '').replace(/_/g, ' ');
+                let statusClass = 'bg-gray-100 text-gray-800';
+                if (p.status === 'sold') statusClass = 'bg-red-100 text-red-800';
+                else if (p.status === 'approved') statusClass = 'bg-green-100 text-green-800';
+                else if (p.status === 'pending_approval') statusClass = 'bg-yellow-100 text-yellow-800';
+                
+                const isDisabled = p.status === 'sold';
+                const rowClass = isDisabled ? 'bg-gray-100 opacity-70' : (!p.imageUrl ? 'bg-yellow-50' : '');
+
+                return `
+                    <tr class="border-b hover:bg-gray-50 ${rowClass}">
+                        <td class="p-2"><img src="${imageUrl}" alt="${p.title}" class="w-24 h-16 object-cover rounded"></td>
+                        <td class="px-4 py-3">
+                            <p class="font-semibold text-gray-800">${p.title}</p>
+                            <p class="text-xs text-gray-600">${p.description}</p>
+                        </td>
+                        <td class="px-4 py-3">
+                            <p>${p.sellerName}</p>
+                            <p class="text-xs text-gray-500">${p.sellerMobile}</p>
+                        </td>
+                        <td class="px-4 py-3 text-xs">
+                            ${listingDetails}
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full capitalize ${statusClass}">${statusText}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <input type="text" id="img-url-${p.id}" class="w-full border border-gray-300 rounded-md shadow-sm p-2 text-xs" placeholder="Paste Google Drive share link here" value="${p.imageUrl || ''}" ${isDisabled ? 'disabled' : ''}>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-col gap-2">
+                                <button onclick="saveImageUrl('${p.id}')" class="bg-indigo-500 text-white text-xs font-semibold py-1 px-3 rounded-md hover:bg-indigo-600 disabled:bg-indigo-300" ${isDisabled ? 'disabled' : ''}>Save</button>
+                                <button onclick="deleteProduct('${p.id}')" class="bg-red-500 text-white text-xs font-semibold py-1 px-3 rounded-md hover:bg-red-600">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            inventoryTbody.innerHTML = rowsHtml;
+        }
+
+        async function saveImageUrl(productId) {
+            const input = document.getElementById(`img-url-${productId}`);
+            const newUrl = input.value.trim();
+            try {
+                await db.ref(`marketplaceProducts/${productId}`).update({ imageUrl: newUrl });
+                showToast("Image URL updated successfully!");
+                // The 'on' listener will automatically re-render the table
+            } catch (error) {
+                showToast("Failed to update URL.", 4000);
+                console.error("Update error:", error);
+            }
+        }
+
+        async function deleteProduct(productId) {
+            if (confirm("Are you sure you want to permanently delete this product listing?")) {
+                try {
+                    await db.ref(`marketplaceProducts/${productId}`).remove();
+                    showToast("Product deleted successfully.");
+                } catch (error) {
+                    showToast("Failed to delete product.", 4000);
+                    console.error("Delete error:", error);
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                
+                const productsRef = db.ref('marketplaceProducts');
+                productsRef.on('value', (snapshot) => {
+                    const products = snapshot.val() || {};
+                    renderTable(products);
+                });
+                
+            } catch(e) { 
+                console.error(e); 
+                alert("Firebase connection failed. This page will not work.");
+            }
+        });
+        
+        window.saveImageUrl = saveImageUrl;
+        window.deleteProduct = deleteProduct;
+    </script>
+
+
+<script src="./script.js"></script></body></html>
