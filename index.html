@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Stock management nav</title><meta name="title" content="Stock management nav"><meta name="description" content="All market place "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Stock management </title><meta name="title" content="Stock management "><meta name="description" content="All market inventory "><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -119,6 +119,14 @@
                 if (p.listingType === 'rent' || p.listingType === 'both') {
                     listingDetails += `<br>Rent: <strong>₹${p.rentPrice}/day</strong>`;
                 }
+                
+                const colors = p.colors && p.colors.length > 0 ? p.colors.join(', ') : 'N/A';
+                const inventory = p.inventory && Object.keys(p.inventory).length > 0
+                    ? Object.entries(p.inventory).map(([size, stock]) => `${size}(${stock})`).join(', ')
+                    : 'N/A';
+                listingDetails += `<br>Colors: <span class="font-normal">${colors}</span>`;
+                listingDetails += `<br>Stock: <span class="font-normal">${inventory}</span>`;
+
 
                 const statusText = (p.status || '').replace(/_/g, ' ');
                 let statusClass = 'bg-gray-100 text-gray-800';
